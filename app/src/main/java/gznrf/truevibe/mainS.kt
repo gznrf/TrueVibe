@@ -230,8 +230,8 @@ fun CameraPreview(imageCapture: ImageCapture, lifecycleOwner: LifecycleOwner) {
                 it.setSurfaceProvider(previewView.surfaceProvider)
             }
 
-            // Выбираем заднюю камеру по умолчанию
-            val cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+            // Выбираем переднюю камеру по умолчанию
+            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
 
             try {
                 // Отвязываем все предыдущие использования, чтобы избежать конфликтов
