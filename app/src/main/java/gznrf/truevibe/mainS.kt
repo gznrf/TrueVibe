@@ -8,6 +8,7 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.MediaStore
+import android.provider.MediaStore.*
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -58,61 +59,47 @@ import com.google.mlkit.vision.face.FaceDetectorOptions
 import java.text.SimpleDateFormat
 import java.util.Locale
 
+var greetTitle = "Узнай свое настроение"
+var happyTitle = "Вы улыбаетесь\nУлыбка продлевает жизнь!"
+var notHappyTitle = "Вы не веселый\nУлыбнитесь)"
+var errorTitle = "Вашего лица не видно\nУлыбнитесь и нажмите кнопку)"
+
+/*val sadTitle = "Вы грустный\nвсе будет \nхорошо!\n"
+val angryTitle = "Вы злой\nпопробуйте успокоиться!"*/
 @Composable
 fun MainScreen() {
-    // Заголовки для разных состояний настроения
-    val greetTitle = "Узнай свое настроение"
-    val sadTitle = "Вы грустный\nвсе будет \nхорошо!\n"
-    val happyTitle = "Вы веселый\nПродолжайте в том же духе!"
-    val angryTitle = "Вы злой\nпопробуйте успокоиться!"
 
-    // Массив для циклического переключения заголовков
-    var titlesArray = arrayOf(greetTitle, sadTitle, happyTitle, angryTitle)
 
-    // Состояние для хранения текущего текста заголовка. `remember` сохраняет его между обновлениями экрана.
     var mainTitleText by remember { mutableStateOf(greetTitle) }
-    // Состояние для хранения индекса текущего заголовка в массиве.
-    var i by remember { mutableIntStateOf(1) }
-
-    // Получаем текущий контекст и владельца жизненного цикла, необходимые для CameraX
     val context = LocalContext.current
-    // Создаем и запоминаем объект для управления съемкой фото
+
     val imageCapture = remember { ImageCapture.Builder().build() }
     val lifecycleOwner = LocalLifecycleOwner.current
 
-    // Определяем, какие разрешения запрашивать в зависимости от версии Android
     val requiredPermissions = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
-        // Для старых версий Android (до API 29) нужен доступ к хранилищу для сохранения фото
         arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
     } else {
-        // Для новых версий достаточно только разрешения на камеру
         arrayOf(Manifest.permission.CAMERA)
     }
 
-    // Состояние для отслеживания, предоставлены ли все необходимые разрешения
     var hasPermissions by remember { mutableStateOf(false) }
-    // Создаем лаунчер для запроса разрешений. Результат (да/нет) обновляет `hasPermissions`.
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions(),
         onResult = { permissionsMap ->
-            // Считаем, что разрешения есть, только если пользователь одобрил все из них
             hasPermissions = permissionsMap.values.all { it }
         }
     )
 
-    // Запускаем запрос разрешений один раз при первом создании экрана
     LaunchedEffect(key1 = true) {
         launcher.launch(requiredPermissions)
     }
 
-    // Основной контейнер экрана, располагающий элементы вертикально по центру
     Column(
         modifier = Modifier.fillMaxSize()
             .background(Color(0xFF33A6B2)),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        // Строка для отображения заголовка
         Row(
             modifier = Modifier.size(322.dp, 72.dp),
             horizontalArrangement = Arrangement.Start
@@ -127,13 +114,11 @@ fun MainScreen() {
 
         Spacer(modifier = Modifier.height(25.dp))
 
-        // Контейнер для предпросмотра камеры
         Box(
             modifier = Modifier
                 .size(322.dp, 582.dp)
                 .clip(RoundedCornerShape(15.dp))
         ) {
-            // Отображаем предпросмотр камеры, только если разрешения предоставлены
             if (hasPermissions) {
                 CameraPreview(imageCapture = imageCapture, lifecycleOwner = lifecycleOwner)
             }
@@ -141,13 +126,11 @@ fun MainScreen() {
 
         Spacer(modifier = Modifier.height(36.dp))
 
-        // Строка с кнопками управления
         Row(
             modifier = Modifier.size(322.dp, 84.dp),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Пустой элемент для выравнивания
             IconButton(
                 onClick = {},
                 modifier = Modifier
@@ -158,40 +141,12 @@ fun MainScreen() {
 
             Spacer(modifier = Modifier.width(20.dp))
 
-            // Кнопка — сделать фото
             IconButton(
                 onClick = {
-                    // Делаем фото, только если есть разрешение
                     if(hasPermissions) {
-                        // Меняем заголовок на следующий из массива
-                        mainTitleText = titlesArray[i]
-                        // Обновляем индекс для следующего нажатия, обеспечивая цикличность
-                        if (i == titlesArray.lastIndex){
-                            i = 0
-                        } else {
-                            i++
+                        defineEmotion(context, imageCapture) { resultText ->
+                            mainTitleText = resultText
                         }
-                        val opts = FaceDetectorOptions.Builder()
-                            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
-                            .build()
-                        val detector = FaceDetection.getClient(opts);
-                        val bitmap: Bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.placeholder_face1)
-                        val image = InputImage.fromBitmap(bitmap, 0)
-                        val result = detector.process(image)
-                            .addOnSuccessListener { faces ->
-                                for (face in faces) {
-                                    // If classification was enabled:
-                                    if (face.smilingProbability != null) {
-                                        mainTitleText = "smile"
-                                        val smileProb = face.smilingProbability
-                                    }
-                                }
-
-                            }
-                            .addOnFailureListener { e ->
-
-                            }
-                        takePhoto(context, imageCapture)
                     }
                 },
                 modifier = Modifier
@@ -211,10 +166,7 @@ fun MainScreen() {
 
             // Кнопка — обновить (сброс)
             IconButton(
-                onClick = { 
-                    // Сбрасываем заголовок и индекс к начальным значениям
-                    mainTitleText = greetTitle
-                    i = 1
+                onClick = {
                  },
                 modifier = Modifier
                     .size(70.dp)
@@ -283,43 +235,65 @@ fun CameraPreview(imageCapture: ImageCapture, lifecycleOwner: LifecycleOwner) {
  * @param context Контекст приложения.
  * @param imageCapture Объект, управляющий процессом съемки.
  */
-private fun takePhoto(
+private fun defineEmotion(
     context: Context,
-    imageCapture: ImageCapture
+    imageCapture: ImageCapture,
+    onResult: (String) -> Unit
 ) {
-    // Создаем уникальное имя файла на основе текущего времени
     val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US).format(System.currentTimeMillis())
-    // Подготавливаем метаданные для сохранения изображения
     val contentValues = ContentValues().apply {
-        put(MediaStore.MediaColumns.DISPLAY_NAME, name)
-        put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-        // Указываем папку для сохранения (работает на Android 10 и выше)
+        put(MediaColumns.DISPLAY_NAME, name)
+        put(MediaColumns.MIME_TYPE, "image/jpeg")
         if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
-            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/CameraX-Image")
+            put(Images.Media.RELATIVE_PATH, "Pictures/CameraX-Image")
         }
     }
 
-    // Создаем объект с опциями для сохранения файла
     val outputOptions = ImageCapture.OutputFileOptions.Builder(
         context.contentResolver,
-        MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+        Images.Media.EXTERNAL_CONTENT_URI,
         contentValues
     ).build()
 
-    // Запускаем процесс съемки
     imageCapture.takePicture(
         outputOptions,
         ContextCompat.getMainExecutor(context),
-        // Колбэк, который будет вызван после завершения съемки
         object : ImageCapture.OnImageSavedCallback {
-            // В случае ошибки выводим лог
             override fun onError(exc: ImageCaptureException) {
                 Log.e("takePhoto", "Ошибка сохранения фото: ", exc)
             }
 
-            // В случае успеха выводим лог с URI сохраненного файла
             override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                Log.d("takePhoto", "Фото успешно сохранено: ${output.savedUri}")
+                val savedUri = output.savedUri ?: return onResult("URI пустой")
+
+                val bitmap = MediaStore.Images.Media.getBitmap(
+                    context.contentResolver,
+                    savedUri
+                )
+
+                val opts = FaceDetectorOptions.Builder()
+                    .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                    .build()
+
+                val detector = FaceDetection.getClient(opts)
+                val image = InputImage.fromBitmap(bitmap, 0)
+
+                detector.process(image)
+                    .addOnSuccessListener { faces ->
+                        if (faces.isNotEmpty()) {
+                            val face = faces.first()
+                            if (face.smilingProbability != null && face.smilingProbability!! > 0.5f) {
+                                onResult(happyTitle)
+                            } else {
+                                onResult(notHappyTitle)
+                            }
+                        } else {
+                            onResult(errorTitle)
+                        }
+                    }
+                    .addOnFailureListener {
+                        onResult("Камера не работает, проверьте ее")
+                    }
             }
         }
     )
