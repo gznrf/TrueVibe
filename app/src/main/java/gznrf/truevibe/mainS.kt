@@ -1,8 +1,11 @@
 package gznrf.truevibe
 
 import android.Manifest
+import android.R.attr.bitmap
 import android.content.ContentValues
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.os.Build
 import android.provider.MediaStore
 import android.util.Log
@@ -49,6 +52,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.FaceDetection
+import com.google.mlkit.vision.face.FaceDetectorOptions
 import java.text.SimpleDateFormat
 import java.util.Locale
 
@@ -61,7 +67,7 @@ fun MainScreen() {
     val angryTitle = "Вы злой\nпопробуйте успокоиться!"
 
     // Массив для циклического переключения заголовков
-    val titlesArray = arrayOf(greetTitle, sadTitle, happyTitle, angryTitle)
+    var titlesArray = arrayOf(greetTitle, sadTitle, happyTitle, angryTitle)
 
     // Состояние для хранения текущего текста заголовка. `remember` сохраняет его между обновлениями экрана.
     var mainTitleText by remember { mutableStateOf(greetTitle) }
@@ -165,7 +171,26 @@ fun MainScreen() {
                         } else {
                             i++
                         }
-                        // Вызываем функцию для съемки фото
+                        val opts = FaceDetectorOptions.Builder()
+                            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                            .build()
+                        val detector = FaceDetection.getClient(opts);
+                        val bitmap: Bitmap = BitmapFactory.decodeResource(context.resources, R.drawable.placeholder_face1)
+                        val image = InputImage.fromBitmap(bitmap, 0)
+                        val result = detector.process(image)
+                            .addOnSuccessListener { faces ->
+                                for (face in faces) {
+                                    // If classification was enabled:
+                                    if (face.smilingProbability != null) {
+                                        mainTitleText = "smile"
+                                        val smileProb = face.smilingProbability
+                                    }
+                                }
+
+                            }
+                            .addOnFailureListener { e ->
+
+                            }
                         takePhoto(context, imageCapture)
                     }
                 },
