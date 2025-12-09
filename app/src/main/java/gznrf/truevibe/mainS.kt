@@ -33,7 +33,7 @@ var i = 1
 fun MainScreen() {
     val greetTitle = "Узнай свое настроение"
     val sadTitle = "Вы грустный\nвсе будет \nхорошо!\n"
-    val happyTitle = "Вы веселый\nидите нахуй"
+    val happyTitle = "Вы веселый\nидите нафиг"
     val angryTitle = "Вы злой\nпопробуйте успокоиться!"
 
     val titlesArray = arrayOf(greetTitle, sadTitle, happyTitle, angryTitle)
