@@ -1,20 +1,15 @@
 package gznrf.truevibe
 
 import android.Manifest
-import android.R.attr.bitmap
-import android.content.ContentValues
 import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
 import android.os.Build
-import android.provider.MediaStore
-import android.provider.MediaStore.*
 import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
+import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
@@ -25,7 +20,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -36,7 +33,6 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -47,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
@@ -56,25 +53,18 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
-import java.text.SimpleDateFormat
-import java.util.Locale
 
 var greetTitle = "Узнай свое настроение"
 var happyTitle = "Вы улыбаетесь\nУлыбка продлевает жизнь!"
-var notHappyTitle = "Вы не веселый\nУлыбнитесь)"
+var notHappyTitle = "Вы не улыбаетесь\nУлыбнитесь)"
 var errorTitle = "Вашего лица не видно\nУлыбнитесь и нажмите кнопку)"
 
-/*val sadTitle = "Вы грустный\nвсе будет \nхорошо!\n"
-val angryTitle = "Вы злой\nпопробуйте успокоиться!"*/
 @Composable
 fun MainScreen() {
-
-
     var mainTitleText by remember { mutableStateOf(greetTitle) }
     val context = LocalContext.current
-
-    val imageCapture = remember { ImageCapture.Builder().build() }
     val lifecycleOwner = LocalLifecycleOwner.current
+    val imageCapture = remember { ImageCapture.Builder().build() }
 
     val requiredPermissions = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
         arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -95,28 +85,28 @@ fun MainScreen() {
     }
 
     Column(
-        modifier = Modifier.fillMaxSize()
-            .background(Color(0xFF33A6B2)),
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color(0xFF33A6B2))
+            .padding(16.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        Row(
-            modifier = Modifier.size(322.dp, 72.dp),
-            horizontalArrangement = Arrangement.Start
-        ) {
-            Text(
-                text = mainTitleText,
-                fontSize = 32.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White
-            )
-        }
-
-        Spacer(modifier = Modifier.height(25.dp))
+        Text(
+            text = mainTitleText,
+            fontSize = 32.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 24.dp)
+        )
 
         Box(
             modifier = Modifier
-                .size(322.dp, 582.dp)
+                .fillMaxWidth()
+                .weight(1f)
                 .clip(RoundedCornerShape(15.dp))
         ) {
             if (hasPermissions) {
@@ -124,26 +114,16 @@ fun MainScreen() {
             }
         }
 
-        Spacer(modifier = Modifier.height(36.dp))
+        Spacer(modifier = Modifier.height(24.dp))
 
         Row(
-            modifier = Modifier.size(322.dp, 84.dp),
+            modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(
-                onClick = {},
-                modifier = Modifier
-                    .size(60.dp)
-                    .background(Color(0xFF33A6B2))
-            ) {
-            }
-
-            Spacer(modifier = Modifier.width(20.dp))
-
-            IconButton(
                 onClick = {
-                    if(hasPermissions) {
+                    if (hasPermissions) {
                         defineEmotion(context, imageCapture) { resultText ->
                             mainTitleText = resultText
                         }
@@ -164,10 +144,8 @@ fun MainScreen() {
 
             Spacer(modifier = Modifier.width(20.dp))
 
-            // Кнопка — обновить (сброс)
             IconButton(
-                onClick = {
-                 },
+                onClick = { mainTitleText = greetTitle },
                 modifier = Modifier
                     .size(70.dp)
                     .clip(CircleShape)
@@ -184,117 +162,86 @@ fun MainScreen() {
     }
 }
 
-/**
- * @param imageCapture Объект, управляющий процессом съемки фото.
- * @param lifecycleOwner Владелец жизненного цикла, к которому привязывается камера.
- */
 @Composable
 fun CameraPreview(imageCapture: ImageCapture, lifecycleOwner: LifecycleOwner) {
     val context = LocalContext.current
-    // `remember` создает и запоминает `PreviewView` между перерисовками
     val previewView = remember { PreviewView(context) }
 
-    // `LaunchedEffect` запускает код привязки камеры, когда `lifecycleOwner` становится доступен.
-    // Это гарантирует, что камера не будет инициализироваться на каждом кадре.
     LaunchedEffect(lifecycleOwner) {
-        // Получаем экземпляр провайдера камеры
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
-
-            // Создаем `Preview` (область предпросмотра) и связываем его с `PreviewView`
             val preview = Preview.Builder().build().also {
-                it.setSurfaceProvider(previewView.surfaceProvider)
+                it.surfaceProvider = previewView.surfaceProvider
             }
-
-            // Выбираем переднюю камеру по умолчанию
             val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
-
             try {
-                // Отвязываем все предыдущие использования, чтобы избежать конфликтов
                 cameraProvider.unbindAll()
-                // Привязываем камеру к жизненному циклу
                 cameraProvider.bindToLifecycle(
-                    lifecycleOwner,
-                    cameraSelector,
-                    preview,
-                    imageCapture
+                    lifecycleOwner, cameraSelector, preview, imageCapture
                 )
             } catch (exc: Exception) {
                 Log.e("CameraPreview", "Не удалось привязать камеру", exc)
             }
         }, ContextCompat.getMainExecutor(context))
     }
-
-    // Встраиваем `PreviewView` в иерархию Compose
     AndroidView(factory = { previewView }, modifier = Modifier.fillMaxSize())
 }
 
-/**
- * Функция для съемки и сохранения фотографии.
- * @param context Контекст приложения.
- * @param imageCapture Объект, управляющий процессом съемки.
- */
+@androidx.annotation.OptIn(androidx.camera.core.ExperimentalGetImage::class)
 private fun defineEmotion(
     context: Context,
     imageCapture: ImageCapture,
     onResult: (String) -> Unit
 ) {
-    val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US).format(System.currentTimeMillis())
-    val contentValues = ContentValues().apply {
-        put(MediaColumns.DISPLAY_NAME, name)
-        put(MediaColumns.MIME_TYPE, "image/jpeg")
-        if (Build.VERSION.SDK_INT > Build.VERSION_CODES.P) {
-            put(Images.Media.RELATIVE_PATH, "Pictures/CameraX-Image")
-        }
-    }
-
-    val outputOptions = ImageCapture.OutputFileOptions.Builder(
-        context.contentResolver,
-        Images.Media.EXTERNAL_CONTENT_URI,
-        contentValues
-    ).build()
-
     imageCapture.takePicture(
-        outputOptions,
         ContextCompat.getMainExecutor(context),
-        object : ImageCapture.OnImageSavedCallback {
-            override fun onError(exc: ImageCaptureException) {
-                Log.e("takePhoto", "Ошибка сохранения фото: ", exc)
-            }
+        object : ImageCapture.OnImageCapturedCallback() {
+            override fun onCaptureSuccess(imageProxy: ImageProxy) {
+                val mediaImage = imageProxy.image
+                if (mediaImage != null) {
+                    val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
-            override fun onImageSaved(output: ImageCapture.OutputFileResults) {
-                val savedUri = output.savedUri ?: return onResult("URI пустой")
+                    // High-accuracy face detector options
+                    val highAccuracyOpts = FaceDetectorOptions.Builder()
+                        .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+                        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+                        .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
+                        .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+                        .setMinFaceSize(0.1f)
+                        .enableTracking()
+                        .build()
 
-                val bitmap = MediaStore.Images.Media.getBitmap(
-                    context.contentResolver,
-                    savedUri
-                )
+                    val detector = FaceDetection.getClient(highAccuracyOpts)
 
-                val opts = FaceDetectorOptions.Builder()
-                    .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
-                    .build()
-
-                val detector = FaceDetection.getClient(opts)
-                val image = InputImage.fromBitmap(bitmap, 0)
-
-                detector.process(image)
-                    .addOnSuccessListener { faces ->
-                        if (faces.isNotEmpty()) {
-                            val face = faces.first()
-                            if (face.smilingProbability != null && face.smilingProbability!! > 0.5f) {
-                                onResult(happyTitle)
+                    detector.process(image)
+                        .addOnSuccessListener { faces ->
+                            if (faces.isNotEmpty()) {
+                                val face = faces.first()
+                                if (face.smilingProbability != null && face.smilingProbability!! > 0.5f) {
+                                    onResult(happyTitle)
+                                } else {
+                                    onResult(notHappyTitle)
+                                }
                             } else {
-                                onResult(notHappyTitle)
+                                onResult(errorTitle)
                             }
-                        } else {
-                            onResult(errorTitle)
+                            imageProxy.close()
                         }
-                    }
-                    .addOnFailureListener {
-                        onResult("Камера не работает, проверьте ее")
-                    }
+                        .addOnFailureListener { e ->
+                            Log.e("defineEmotion", "Face detection failed", e)
+                            onResult("Камера не работает, проверьте ее")
+                            imageProxy.close()
+                        }
+                } else {
+                    onResult(errorTitle)
+                    imageProxy.close()
+                }
             }
-        }
-    )
+
+            override fun onError(exception: ImageCaptureException) {
+                Log.e("defineEmotion", "Image capture error", exception)
+                onResult("Не удалось сделать фото")
+            }
+        })
 }
