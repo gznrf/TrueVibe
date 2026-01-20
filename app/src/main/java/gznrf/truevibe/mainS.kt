@@ -251,15 +251,24 @@ private fun analyzeWeeklyEmotions(context: Context): String {
     }
 
     val emotionCounts = weeklyRecords.groupingBy { it.emotion }.eachCount()
-    val mostFrequentEmotion = emotionCounts.maxByOrNull { it.value }?.key
+    val maxCount = emotionCounts.values.maxOrNull() ?: 0
+    if (maxCount == 0) {
+        return "Недостаточно данных для анализа."
+    }
 
-    return when (mostFrequentEmotion) {
-        Emotion.HAPPY -> "На прошлой неделе вы чаще всего радовались! Так держать!"
-        Emotion.SAD -> "На прошлой неделе вы часто грустили. Не забывайте отдыхать."
-        Emotion.NEUTRAL -> "Ваше настроение на прошлой неделе было в основном нейтральным."
-        Emotion.WINKING -> "На прошлой неделе вы часто подмигивали. Отличное настроение!"
-        Emotion.TIRED -> "Кажется, на прошлой неделе вы часто уставали. Пора отдохнуть!"
-        null -> "Недостаточно данных для анализа."
+    val mostFrequentEmotions = emotionCounts.filter { it.value == maxCount }.keys
+
+    if (mostFrequentEmotions.size == 1) {
+        return when (val mostFrequentEmotion = mostFrequentEmotions.first()) {
+            Emotion.HAPPY -> "На прошлой неделе вы чаще всего радовались! Так держать!"
+            Emotion.SAD -> "На прошлой неделе вы часто грустили. Не забывайте отдыхать."
+            Emotion.NEUTRAL -> "Ваше настроение на прошлой неделе было в основном спокойным."
+            Emotion.WINKING -> "На прошлой неделе вы часто подмигивали. Отличное настроение!"
+            Emotion.TIRED -> "Кажется, на прошлой неделе вы часто уставали. Пора отдохнуть!"
+        }
+    } else {
+        val emotionNames = mostFrequentEmotions.joinToString(separator = " и ") { it.displayName.lowercase() }
+        return "На прошлой неделе у вас одинаково часто были: $emotionNames."
     }
 }
 
@@ -345,18 +354,21 @@ private fun processFace(face: Face): Pair<Emotion, String> {
     val rightEyeOpenProb = face.rightEyeOpenProbability ?: 1f
 
     return when {
-        smilingProb > 0.7f -> {
-            Pair(Emotion.HAPPY, happyTitle)
-        }
+        // Specific eye states first
         leftEyeOpenProb < 0.4 && rightEyeOpenProb < 0.4 -> {
             Pair(Emotion.TIRED, tiredTitle)
         }
-        (leftEyeOpenProb > 0.6 && rightEyeOpenProb < 0.4) || (leftEyeOpenProb < 0.4 && rightEyeOpenProb > 0.6) -> {
+        (leftEyeOpenProb < 0.4 && rightEyeOpenProb > 0.8) || (leftEyeOpenProb > 0.8 && rightEyeOpenProb < 0.4) -> {
             Pair(Emotion.WINKING, winkingTitle)
         }
-        smilingProb < 0.3f -> {
+        // Then smile-based states
+        smilingProb > 0.75f -> {
+            Pair(Emotion.HAPPY, happyTitle)
+        }
+        smilingProb < 0.25f -> {
             Pair(Emotion.SAD, sadTitle)
         }
+        // Everything in between is neutral
         else -> {
             Pair(Emotion.NEUTRAL, neutralTitle)
         }
