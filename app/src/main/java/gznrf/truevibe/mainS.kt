@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.List
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -51,12 +53,55 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.mlkit.vision.common.InputImage
+import com.google.mlkit.vision.face.Face
 import com.google.mlkit.vision.face.FaceDetection
 import com.google.mlkit.vision.face.FaceDetectorOptions
+import java.util.Calendar
 
+// Emotion data classes and repository
+enum class Emotion(val displayName: String) {
+    HAPPY("Радость"),
+    SAD("Грусть"),
+    NEUTRAL("Нейтральное")
+}
+
+data class EmotionRecord(val timestamp: Long, val emotion: Emotion)
+
+object EmotionRepository {
+    private const val PREFS_NAME = "EmotionHistory"
+    private const val KEY_EMOTIONS = "emotions"
+
+    fun saveEmotion(context: Context, emotion: Emotion) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val existingEmotions = prefs.getStringSet(KEY_EMOTIONS, emptySet())?.toMutableSet() ?: mutableSetOf()
+        existingEmotions.add("${System.currentTimeMillis()}:${emotion.name}")
+        prefs.edit().putStringSet(KEY_EMOTIONS, existingEmotions).apply()
+    }
+
+    fun getEmotions(context: Context): List<EmotionRecord> {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val emotionStrings = prefs.getStringSet(KEY_EMOTIONS, emptySet()) ?: emptySet()
+        return emotionStrings.mapNotNull {
+            val parts = it.split(":")
+            if (parts.size == 2) {
+                try {
+                    EmotionRecord(parts[0].toLong(), Emotion.valueOf(parts[1]))
+                } catch (e: Exception) {
+                    null
+                }
+            } else {
+                null
+            }
+        }
+    }
+}
+
+
+// Titles
 var greetTitle = "Узнай свое настроение"
-var happyTitle = "Вы улыбаетесь\nУлыбка продлевает жизнь!"
-var notHappyTitle = "Вы не улыбаетесь\nУлыбнитесь)"
+var happyTitle = "Вы выглядите радостным!\nОтличный настрой!"
+var sadTitle = "Вы выглядите грустным.\nВсе будет хорошо!"
+var neutralTitle = "У вас нейтральное\nнастроение."
 var errorTitle = "Вашего лица не видно\nУлыбнитесь и нажмите кнопку)"
 
 @Composable
@@ -65,6 +110,8 @@ fun MainScreen() {
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val imageCapture = remember { ImageCapture.Builder().build() }
+    var cameraSelector by remember { mutableStateOf(CameraSelector.DEFAULT_FRONT_CAMERA) }
+
 
     val requiredPermissions = if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P) {
         arrayOf(Manifest.permission.CAMERA, Manifest.permission.WRITE_EXTERNAL_STORAGE)
@@ -110,7 +157,7 @@ fun MainScreen() {
                 .clip(RoundedCornerShape(15.dp))
         ) {
             if (hasPermissions) {
-                CameraPreview(imageCapture = imageCapture, lifecycleOwner = lifecycleOwner)
+                CameraPreview(imageCapture = imageCapture, lifecycleOwner = lifecycleOwner, cameraSelector = cameraSelector)
             }
         }
 
@@ -118,14 +165,34 @@ fun MainScreen() {
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.Center,
+            horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Analytics Button
+            IconButton(
+                onClick = {
+                    mainTitleText = analyzeWeeklyEmotions(context)
+                },
+                modifier = Modifier
+                    .size(70.dp)
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.2f))
+            ) {
+                Icon(
+                    imageVector = Icons.Default.List,
+                    contentDescription = "Статистика за неделю",
+                    tint = Color.White,
+                    modifier = Modifier.size(50.dp)
+                )
+            }
+
+            // Camera Button
             IconButton(
                 onClick = {
                     if (hasPermissions) {
-                        defineEmotion(context, imageCapture) { resultText ->
+                        defineEmotion(context, imageCapture) { emotion, resultText ->
                             mainTitleText = resultText
+                            EmotionRepository.saveEmotion(context, emotion)
                         }
                     }
                 },
@@ -142,10 +209,15 @@ fun MainScreen() {
                 )
             }
 
-            Spacer(modifier = Modifier.width(20.dp))
-
+            // Switch Camera Button
             IconButton(
-                onClick = { mainTitleText = greetTitle },
+                onClick = { 
+                    cameraSelector = if (cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) {
+                        CameraSelector.DEFAULT_BACK_CAMERA
+                    } else {
+                        CameraSelector.DEFAULT_FRONT_CAMERA
+                    }
+                },
                 modifier = Modifier
                     .size(70.dp)
                     .clip(CircleShape)
@@ -153,7 +225,7 @@ fun MainScreen() {
             ) {
                 Icon(
                     painter = painterResource(id = R.drawable.ic_refresh),
-                    contentDescription = "Обновить фото",
+                    contentDescription = "Переключить камеру",
                     tint = Color.White,
                     modifier = Modifier.size(50.dp)
                 )
@@ -162,19 +234,42 @@ fun MainScreen() {
     }
 }
 
+private fun analyzeWeeklyEmotions(context: Context): String {
+    val allRecords = EmotionRepository.getEmotions(context)
+    val calendar = Calendar.getInstance()
+    calendar.add(Calendar.DAY_OF_YEAR, -7)
+    val oneWeekAgo = calendar.timeInMillis
+
+    val weeklyRecords = allRecords.filter { it.timestamp >= oneWeekAgo }
+
+    if (weeklyRecords.isEmpty()) {
+        return "За последнюю неделю нет данных. Сделайте несколько снимков!"
+    }
+
+    val emotionCounts = weeklyRecords.groupingBy { it.emotion }.eachCount()
+    val mostFrequentEmotion = emotionCounts.maxByOrNull { it.value }?.key
+
+    return when (mostFrequentEmotion) {
+        Emotion.HAPPY -> "На прошлой неделе вы чаще всего радовались! Так держать!"
+        Emotion.SAD -> "На прошлой неделе вы часто грустили. Не забывайте отдыхать."
+        Emotion.NEUTRAL -> "Ваше настроение на прошлой неделе было в основном нейтральным."
+        null -> "Недостаточно данных для анализа."
+    }
+}
+
+
 @Composable
-fun CameraPreview(imageCapture: ImageCapture, lifecycleOwner: LifecycleOwner) {
+fun CameraPreview(imageCapture: ImageCapture, lifecycleOwner: LifecycleOwner, cameraSelector: CameraSelector) {
     val context = LocalContext.current
     val previewView = remember { PreviewView(context) }
 
-    LaunchedEffect(lifecycleOwner) {
+    LaunchedEffect(lifecycleOwner, cameraSelector) {
         val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
         cameraProviderFuture.addListener({
             val cameraProvider = cameraProviderFuture.get()
             val preview = Preview.Builder().build().also {
                 it.surfaceProvider = previewView.surfaceProvider
             }
-            val cameraSelector = CameraSelector.DEFAULT_FRONT_CAMERA
             try {
                 cameraProvider.unbindAll()
                 cameraProvider.bindToLifecycle(
@@ -192,7 +287,7 @@ fun CameraPreview(imageCapture: ImageCapture, lifecycleOwner: LifecycleOwner) {
 private fun defineEmotion(
     context: Context,
     imageCapture: ImageCapture,
-    onResult: (String) -> Unit
+    onResult: (Emotion, String) -> Unit
 ) {
     imageCapture.takePicture(
         ContextCompat.getMainExecutor(context),
@@ -202,14 +297,9 @@ private fun defineEmotion(
                 if (mediaImage != null) {
                     val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
 
-                    // High-accuracy face detector options
                     val highAccuracyOpts = FaceDetectorOptions.Builder()
                         .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-                        .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
-                        .setContourMode(FaceDetectorOptions.CONTOUR_MODE_ALL)
                         .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
-                        .setMinFaceSize(0.1f)
-                        .enableTracking()
                         .build()
 
                     val detector = FaceDetection.getClient(highAccuracyOpts)
@@ -218,30 +308,43 @@ private fun defineEmotion(
                         .addOnSuccessListener { faces ->
                             if (faces.isNotEmpty()) {
                                 val face = faces.first()
-                                if (face.smilingProbability != null && face.smilingProbability!! > 0.5f) {
-                                    onResult(happyTitle)
-                                } else {
-                                    onResult(notHappyTitle)
-                                }
+                                val (emotion, text) = processFace(face)
+                                onResult(emotion, text)
                             } else {
-                                onResult(errorTitle)
+                                onResult(Emotion.NEUTRAL, errorTitle) // Default to neutral on error
                             }
                             imageProxy.close()
                         }
                         .addOnFailureListener { e ->
                             Log.e("defineEmotion", "Face detection failed", e)
-                            onResult("Камера не работает, проверьте ее")
+                            onResult(Emotion.NEUTRAL, "Камера не работает, проверьте ее")
                             imageProxy.close()
                         }
                 } else {
-                    onResult(errorTitle)
+                    onResult(Emotion.NEUTRAL, errorTitle)
                     imageProxy.close()
                 }
             }
 
             override fun onError(exception: ImageCaptureException) {
                 Log.e("defineEmotion", "Image capture error", exception)
-                onResult("Не удалось сделать фото")
+                onResult(Emotion.NEUTRAL, "Не удалось сделать фото")
             }
         })
+}
+
+private fun processFace(face: Face): Pair<Emotion, String> {
+    val smilingProb = face.smilingProbability ?: 0f
+
+    return when {
+        smilingProb > 0.7f -> {
+            Pair(Emotion.HAPPY, happyTitle)
+        }
+        smilingProb < 0.3f -> {
+            Pair(Emotion.SAD, sadTitle)
+        }
+        else -> {
+            Pair(Emotion.NEUTRAL, neutralTitle)
+        }
+    }
 }
