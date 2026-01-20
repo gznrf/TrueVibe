@@ -62,7 +62,9 @@ import java.util.Calendar
 enum class Emotion(val displayName: String) {
     HAPPY("Радость"),
     SAD("Грусть"),
-    NEUTRAL("Нейтральное")
+    NEUTRAL("Нейтральное"),
+    WINKING("Подмигивание"),
+    TIRED("Усталость")
 }
 
 data class EmotionRecord(val timestamp: Long, val emotion: Emotion)
@@ -99,10 +101,12 @@ object EmotionRepository {
 
 // Titles
 var greetTitle = "Узнай свое настроение"
-var happyTitle = "Вы выглядите радостным!\nОтличный настрой!"
-var sadTitle = "Вы выглядите грустным.\nВсе будет хорошо!"
-var neutralTitle = "У вас нейтральное\nнастроение."
-var errorTitle = "Вашего лица не видно\nУлыбнитесь и нажмите кнопку)"
+var happyTitle = "Вы выглядите радостным!\nЖелаю вам хорошего дня!"
+var sadTitle = "Вы выглядите грустным.\nТучи скоро рассеются!"
+var neutralTitle = "Вы сейчас спокойны и сосредоточены.\nОтличный момент для продуктивной работы!"
+var winkingTitle = "Вы подмигиваете!\nОтличный знак!"
+var tiredTitle = "Кажется, вы устали.\nНе забывайте отдыхать."
+var errorTitle = "Вашего лица не видно\nПопробуйте еще раз."
 
 @Composable
 fun MainScreen() {
@@ -253,6 +257,8 @@ private fun analyzeWeeklyEmotions(context: Context): String {
         Emotion.HAPPY -> "На прошлой неделе вы чаще всего радовались! Так держать!"
         Emotion.SAD -> "На прошлой неделе вы часто грустили. Не забывайте отдыхать."
         Emotion.NEUTRAL -> "Ваше настроение на прошлой неделе было в основном нейтральным."
+        Emotion.WINKING -> "На прошлой неделе вы часто подмигивали. Отличное настроение!"
+        Emotion.TIRED -> "Кажется, на прошлой неделе вы часто уставали. Пора отдохнуть!"
         null -> "Недостаточно данных для анализа."
     }
 }
@@ -311,7 +317,7 @@ private fun defineEmotion(
                                 val (emotion, text) = processFace(face)
                                 onResult(emotion, text)
                             } else {
-                                onResult(Emotion.NEUTRAL, errorTitle) // Default to neutral on error
+                                onResult(Emotion.NEUTRAL, errorTitle)
                             }
                             imageProxy.close()
                         }
@@ -335,10 +341,18 @@ private fun defineEmotion(
 
 private fun processFace(face: Face): Pair<Emotion, String> {
     val smilingProb = face.smilingProbability ?: 0f
+    val leftEyeOpenProb = face.leftEyeOpenProbability ?: 1f
+    val rightEyeOpenProb = face.rightEyeOpenProbability ?: 1f
 
     return when {
         smilingProb > 0.7f -> {
             Pair(Emotion.HAPPY, happyTitle)
+        }
+        leftEyeOpenProb < 0.4 && rightEyeOpenProb < 0.4 -> {
+            Pair(Emotion.TIRED, tiredTitle)
+        }
+        (leftEyeOpenProb > 0.6 && rightEyeOpenProb < 0.4) || (leftEyeOpenProb < 0.4 && rightEyeOpenProb > 0.6) -> {
+            Pair(Emotion.WINKING, winkingTitle)
         }
         smilingProb < 0.3f -> {
             Pair(Emotion.SAD, sadTitle)
